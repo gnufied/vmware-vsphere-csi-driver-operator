@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	operatorapi "github.com/openshift/api/operator/v1"
+	"github.com/openshift/vmware-vsphere-csi-driver-operator/pkg/operator/utils"
 	"github.com/openshift/vmware-vsphere-csi-driver-operator/pkg/operator/vclib"
 	"github.com/openshift/vmware-vsphere-csi-driver-operator/pkg/operator/vspherecontroller/checks"
 
@@ -51,7 +52,7 @@ func NewStorageClassController(
 }
 
 func (c *StorageClassController) Sync(ctx context.Context, connection *vclib.VSphereConnection, apiDeps checks.KubeAPIInterface) error {
-	checkResultFunc := func() checks.ClusterCheckResult {
+	syncStorageClassFunc := func() checks.ClusterCheckResult {
 		policyName, syncResult := c.syncStoragePolicy(ctx, connection, apiDeps)
 		if syncResult.CheckError != nil {
 			klog.Errorf("error syncing storage policy: %v", syncResult.Reason)
@@ -65,7 +66,13 @@ func (c *StorageClassController) Sync(ctx context.Context, connection *vclib.VSp
 		}
 		return checks.MakeClusterCheckResultPass()
 	}
-	clusterStatus, checkResult := checks.CheckClusterStatus(checkResultFunc(), apiDeps)
+	syncResult := syncStorageClassFunc()
+	if syncResult.CheckError != nil {
+		clusterCondition := "storage_class_sync_failed"
+		utils.InstallErrorMetric.WithLabelValues(string(syncResult.CheckStatus), clusterCondition).Set(1)
+	}
+
+	clusterStatus, checkResult := checks.CheckClusterStatus(syncResult, apiDeps)
 	return c.updateConditions(ctx, checkResult, clusterStatus)
 }
 
