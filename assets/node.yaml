@@ -44,13 +44,12 @@ spec:
               value: unix:///csi/csi.sock
             - name: X_CSI_MODE
               value: "node"
-            # TODO: remove for topology-aware setup
-            # - name: VSPHERE_CSI_CONFIG
-            #   value: "/etc/kubernetes/cloud.conf"
+            - name: VSPHERE_CSI_CONFIG
+              value: "/etc/kubernetes/vsphere-csi-config/cloud.conf"
             - name: X_CSI_SPEC_DISABLE_LEN_CHECK
               value: "true"
             - name: LOGGER_LEVEL
-              value: "PRODUCTION" # Options: DEVELOPMENT, PRODUCTION
+              value: "DEVELOPMENT" # Options: DEVELOPMENT, PRODUCTION
             - name: CSI_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -63,6 +62,9 @@ spec:
               mountPath: /csi
             - name: device-dir
               mountPath: /dev
+            - mountPath: /etc/kubernetes/vsphere-csi-config
+              name: vsphere-csi-config-volume
+              readOnly: true
           ports:
             - name: healthz
               # Due to hostNetwork, this port is open on all nodes!
@@ -143,3 +145,6 @@ spec:
           hostPath:
             path: /dev
             type: Directory
+        - name: vsphere-csi-config-volume
+          configMap:
+            name: vsphere-csi-config

@@ -10,3 +10,6 @@ data:
     [VirtualCenter "${VCENTER}"]
     insecure-flag = "true"
     datacenters = "${DATACENTERS}"
+    [Labels]
+    region = k8s-region
+    zone = k8s-zone

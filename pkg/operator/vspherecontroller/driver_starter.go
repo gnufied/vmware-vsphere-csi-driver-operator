@@ -105,7 +105,10 @@ func (c *VSphereController) createCSIDriver() {
 		"node.yaml",
 		c.apiClients.KubeClient,
 		c.apiClients.KubeInformers.InformersFor(defaultNamespace),
-		[]factory.Informer{c.apiClients.ConfigMapInformer.Informer()},
+		[]factory.Informer{
+			c.apiClients.ConfigMapInformer.Informer(),
+			c.apiClients.SecretInformer.Informer(),
+		},
 		WithLogLevelDaemonSetHook(),
 		csidrivernodeservicecontroller.WithObservedProxyDaemonSetHook(),
 		csidrivernodeservicecontroller.WithCABundleDaemonSetHook(
@@ -113,6 +116,7 @@ func (c *VSphereController) createCSIDriver() {
 			trustedCAConfigMap,
 			c.apiClients.ConfigMapInformer,
 		),
+		withVSphereNodeSecretHook(defaultNamespace, secretName, c.apiClients.SecretInformer),
 	).WithServiceMonitorController(
 		"VMWareVSphereDriverServiceMonitorController",
 		c.apiClients.DynamicClient,
@@ -168,6 +172,53 @@ func WithVSphereCredentials(
 			)
 		}
 		deployment.Spec.Template.Spec.Containers = containers
+		return nil
+	}
+}
+
+func withVSphereNodeSecretHook(
+	namespace string,
+	secretName string,
+	secretInformer corev1informers.SecretInformer,
+) csidrivernodeservicecontroller.DaemonSetHookFunc {
+	return func(opSpec *operatorapi.OperatorSpec, ds *appsv1.DaemonSet) error {
+		secret, err := secretInformer.Lister().Secrets(namespace).Get(secretName)
+		if err != nil {
+			return err
+		}
+
+		// CCO generates a secret that contains dynamic keys, for example:
+		// oc get secret/vmware-vsphere-cloud-credentials -o json | jq .data
+		// {
+		//   "vcenter.xyz.vmwarevmc.com.password": "***",
+		//   "vcenter.xyz.vmwarevmc.com.username": "***"
+		// }
+		// So we need to figure those keys out
+		var usernameKey, passwordKey string
+		for k := range secret.Data {
+			if strings.HasSuffix(k, ".username") {
+				usernameKey = k
+			} else if strings.HasSuffix(k, ".password") {
+				passwordKey = k
+			}
+		}
+		if usernameKey == "" || passwordKey == "" {
+			return fmt.Errorf("could not find vSphere credentials in secret %s/%s", secret.Namespace, secret.Name)
+		}
+
+		// Add to csi-driver and vsphere-syncer containers the vSphere credentials, as env vars.
+		containers := ds.Spec.Template.Spec.Containers
+		for i := range containers {
+			if containers[i].Name != "csi-driver" {
+				continue
+			}
+			containers[i].Env = append(
+				containers[i].Env,
+				newSecretEnvVar(secretName, "VSPHERE_USER", usernameKey),
+				newSecretEnvVar(secretName, "VSPHERE_PASSWORD", passwordKey),
+			)
+		}
+		ds.Spec.Template.Spec.Containers = containers
 		return nil
 	}
 }
