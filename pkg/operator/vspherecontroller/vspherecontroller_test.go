@@ -32,7 +32,7 @@ const (
 
 func newVsphereController(apiClients *utils.APIClient) *VSphereController {
 	gates := featuregates.NewFeatureGate(
-		[]configv1.FeatureGateName{"SomeEnabledFeatureGate", features.FeatureGateVSphereConfigurableMaxAllowedBlockVolumesPerNode},
+		[]configv1.FeatureGateName{"SomeEnabledFeatureGate", features.FeatureGateVSphereConfigurableMaxAllowedBlockVolumesPerNode, features.FeatureGateVSphereMixedNodeEnv},
 		[]configv1.FeatureGateName{"SomeDisabledFeatureGate"},
 	)
 	return newVsphereControllerWithGates(apiClients, gates)

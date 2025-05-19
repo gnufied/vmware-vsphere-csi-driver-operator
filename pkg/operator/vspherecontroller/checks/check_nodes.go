@@ -117,6 +117,18 @@ func (n *NodeChecker) checkOnNode(workInfo nodeChannelWorkData) ClusterCheckResu
 	nodeCheckContext, cancel := context.WithTimeout(workInfo.ctx, nodeCheckTimeout)
 	defer cancel()
 
+	// If node is not a vSphere node, we'll ignore and return result pass.
+	if workInfo.checkOpts.featureGate.Enabled(features.FeatureGateVSphereMixedNodeEnv) {
+		// In the future, we may want to modify this to look for more information if we start to support other IPI style
+		// nodes in a cluster (such as Nutanix with vSphere).  In this case, both will set instance-type, but for now, we
+		// only support vSphere with bare metal (platform=none) nodes.
+		instanceType, hasKey := node.Labels["node.kubernetes.io/instance-type"]
+		if !hasKey || instanceType == "" {
+			klog.V(2).InfoS("Detected non vsphere node", "Name", node.Name, "InstanceType", instanceType)
+			return MakeClusterCheckResultPass()
+		}
+	}
+
 	vm, err := getVM(nodeCheckContext, checkOpts, node)
 	if err != nil {
 		return makeDeprecatedEnvironmentError(CheckStatusVcenterAPIError, err)
